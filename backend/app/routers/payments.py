@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
@@ -8,7 +9,12 @@ from app.db import get_db
 from app.deps import get_current_user
 from app.models import Payment, PaymentStatus, User, utcnow
 from app.schemas import SubscribeResponse
-from app.services.crypto_pay_service import create_subscription_invoice, fetch_invoice, verify_webhook_signature
+from app.services.crypto_pay_service import (
+    CryptoPayError,
+    create_subscription_invoice,
+    fetch_invoice,
+    verify_webhook_signature,
+)
 
 router = APIRouter(prefix="/api", tags=["payments"])
 
@@ -22,11 +28,17 @@ _STATUS_MAP = {
 
 @router.post("/subscribe", response_model=SubscribeResponse)
 def subscribe(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    result = create_subscription_invoice(
-        user_id=user.id,
-        amount=settings.SUBSCRIPTION_PRICE_USDT,
-        description=f"Подписка RUBex на {settings.SUBSCRIPTION_DAYS} дней",
-    )
+    try:
+        result = create_subscription_invoice(
+            user_id=user.id,
+            amount=settings.SUBSCRIPTION_PRICE_USDT,
+            description=f"Подписка RUBex на {settings.SUBSCRIPTION_DAYS} дней",
+        )
+    except (CryptoPayError, httpx.HTTPError) as e:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Не удалось создать счёт на оплату (CryptoBot недоступен), попробуйте чуть позже",
+        ) from e
 
     payment = Payment(
         user_id=user.id,
@@ -91,12 +103,19 @@ def subscribe_status(payment_id: str, db: Session = Depends(get_db), user: User 
         raise HTTPException(status.HTTP_404_NOT_FOUND, "payment not found")
 
     if payment.status == PaymentStatus.PENDING:
-        remote = fetch_invoice(payment_id)
-        mapped = _STATUS_MAP.get(remote["status"])
-        if mapped == PaymentStatus.SUCCEEDED:
-            _activate_subscription(db, payment)
-        elif mapped == PaymentStatus.CANCELED:
-            payment.status = PaymentStatus.CANCELED
-            db.commit()
+        try:
+            remote = fetch_invoice(payment_id)
+        except (CryptoPayError, httpx.HTTPError):
+            # CryptoBot временно недоступен — просто вернём текущий сохранённый статус,
+            # фронтенд повторит опрос через несколько секунд (см. webapp/app.js)
+            remote = None
+
+        if remote is not None:
+            mapped = _STATUS_MAP.get(remote["status"])
+            if mapped == PaymentStatus.SUCCEEDED:
+                _activate_subscription(db, payment)
+            elif mapped == PaymentStatus.CANCELED:
+                payment.status = PaymentStatus.CANCELED
+                db.commit()
 
     return {"status": payment.status, "subscription_until": user.subscription_until}
