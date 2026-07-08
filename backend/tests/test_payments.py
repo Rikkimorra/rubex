@@ -1,19 +1,27 @@
-from types import SimpleNamespace
+import hashlib
+import hmac
+import json
 
 import app.routers.payments as payments_router
 from tests.helpers import auth_headers
 
 BOT_TOKEN = "111111:TEST-BOT-TOKEN"
+CRYPTO_TOKEN = "test-crypto-pay-token"
+
+
+def _sign(raw_body: bytes) -> str:
+    secret_key = hashlib.sha256(CRYPTO_TOKEN.encode()).digest()
+    return hmac.new(secret_key, raw_body, hashlib.sha256).hexdigest()
 
 
 def test_subscribe_creates_pending_payment(client, monkeypatch):
     monkeypatch.setattr(
         payments_router,
-        "create_subscription_payment",
-        lambda user_id, amount_rub, bot_username: {
-            "id": "fake-payment-1",
-            "status": "pending",
-            "confirmation_url": "https://yookassa.example/confirm/fake-payment-1",
+        "create_subscription_invoice",
+        lambda user_id, amount, description: {
+            "id": "fake-invoice-1",
+            "status": "active",
+            "pay_url": "https://t.me/CryptoBot?start=fake-invoice-1",
         },
     )
 
@@ -21,35 +29,33 @@ def test_subscribe_creates_pending_payment(client, monkeypatch):
     res = client.post("/api/subscribe", headers=headers)
     assert res.status_code == 200
     body = res.json()
-    assert body["payment_id"] == "fake-payment-1"
+    assert body["payment_id"] == "fake-invoice-1"
     assert body["confirmation_url"].startswith("https://")
 
 
-def test_subscribe_status_activates_subscription_when_succeeded(client, monkeypatch):
+def test_subscribe_status_activates_subscription_when_paid(client, monkeypatch):
     monkeypatch.setattr(
         payments_router,
-        "create_subscription_payment",
-        lambda user_id, amount_rub, bot_username: {
-            "id": "fake-payment-2",
-            "status": "pending",
-            "confirmation_url": "https://yookassa.example/confirm/fake-payment-2",
+        "create_subscription_invoice",
+        lambda user_id, amount, description: {
+            "id": "fake-invoice-2",
+            "status": "active",
+            "pay_url": "https://t.me/CryptoBot?start=fake-invoice-2",
         },
     )
     headers = auth_headers({"id": 602, "username": "payer2"}, BOT_TOKEN)
     client.post("/api/subscribe", headers=headers)
 
-    # Пользователь ещё не подписан
     me_before = client.get("/api/me", headers=headers).json()
     assert me_before["is_subscribed"] is False
 
-    # Эмулируем, что ЮKassa подтвердила оплату
     monkeypatch.setattr(
         payments_router,
-        "fetch_payment",
-        lambda payment_id: SimpleNamespace(status="succeeded"),
+        "fetch_invoice",
+        lambda invoice_id: {"invoice_id": invoice_id, "status": "paid"},
     )
 
-    res = client.get("/api/subscribe/fake-payment-2/status", headers=headers)
+    res = client.get("/api/subscribe/fake-invoice-2/status", headers=headers)
     assert res.status_code == 200
     assert res.json()["status"] == "succeeded"
 
@@ -57,28 +63,36 @@ def test_subscribe_status_activates_subscription_when_succeeded(client, monkeypa
     assert me_after["is_subscribed"] is True
 
 
-def test_webhook_activates_subscription(client, monkeypatch):
+def test_webhook_rejects_bad_signature(client):
+    raw = json.dumps({"update_type": "invoice_paid", "payload": {"invoice_id": 999}}).encode()
+    res = client.post(
+        "/api/cryptobot/webhook",
+        content=raw,
+        headers={"crypto-pay-api-signature": "deadbeef", "Content-Type": "application/json"},
+    )
+    assert res.status_code == 401
+
+
+def test_webhook_activates_subscription_with_valid_signature(client, monkeypatch):
     monkeypatch.setattr(
         payments_router,
-        "create_subscription_payment",
-        lambda user_id, amount_rub, bot_username: {
-            "id": "fake-payment-3",
-            "status": "pending",
-            "confirmation_url": "https://yookassa.example/confirm/fake-payment-3",
+        "create_subscription_invoice",
+        lambda user_id, amount, description: {
+            "id": "fake-invoice-3",
+            "status": "active",
+            "pay_url": "https://t.me/CryptoBot?start=fake-invoice-3",
         },
     )
     headers = auth_headers({"id": 603, "username": "payer3"}, BOT_TOKEN)
     client.post("/api/subscribe", headers=headers)
 
-    monkeypatch.setattr(
-        payments_router,
-        "fetch_payment",
-        lambda payment_id: SimpleNamespace(status="succeeded"),
-    )
+    raw = json.dumps({"update_type": "invoice_paid", "payload": {"invoice_id": "fake-invoice-3"}}).encode()
+    signature = _sign(raw)
 
     res = client.post(
-        "/api/yookassa/webhook",
-        json={"event": "payment.succeeded", "object": {"id": "fake-payment-3", "status": "succeeded"}},
+        "/api/cryptobot/webhook",
+        content=raw,
+        headers={"crypto-pay-api-signature": signature, "Content-Type": "application/json"},
     )
     assert res.status_code == 200
 

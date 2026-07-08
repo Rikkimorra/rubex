@@ -71,8 +71,9 @@ class Payment(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
 
-    yookassa_payment_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    amount_rub: Mapped[float] = mapped_column(Float)
+    invoice_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)  # id инвойса CryptoBot
+    amount: Mapped[float] = mapped_column(Float)  # сумма в криптоактиве (например USDT)
+    asset: Mapped[str] = mapped_column(String(16), default="USDT")
     status: Mapped[PaymentStatus] = mapped_column(Enum(PaymentStatus), default=PaymentStatus.PENDING)
     subscription_days: Mapped[int] = mapped_column(Integer)
 

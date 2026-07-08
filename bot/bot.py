@@ -28,7 +28,7 @@ dp = Dispatcher()
 def webapp_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="\U0001f4b1 Открыть биржу", web_app=WebAppInfo(url=settings.WEBAPP_URL))]
+            [InlineKeyboardButton(text="\U0001f4b1 Открыть RUBex", web_app=WebAppInfo(url=settings.WEBAPP_URL))]
         ]
     )
 
@@ -36,10 +36,10 @@ def webapp_keyboard() -> InlineKeyboardMarkup:
 @dp.message(CommandStart())
 async def cmd_start(message: Message):
     text = (
-        "Привет! Это площадка обмена рублями внутри Telegram.\n\n"
+        "Привет! Это RUBex — площадка обмена рублями внутри Telegram.\n\n"
         "Вкладки по суммам: до 50к, 50-100к, 100-200к, 200к+.\n"
         f"Доступ к размещению объявлений и контактам — по подписке "
-        f"({settings.SUBSCRIPTION_PRICE_RUB:.0f}₽ / {settings.SUBSCRIPTION_DAYS} дней).\n\n"
+        f"({settings.SUBSCRIPTION_PRICE_USDT:.0f} USDT / {settings.SUBSCRIPTION_DAYS} дней).\n\n"
         "Нажми кнопку ниже, чтобы открыть приложение."
     )
     await message.answer(text, reply_markup=webapp_keyboard())

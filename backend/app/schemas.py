@@ -10,7 +10,7 @@ class MeResponse(BaseModel):
     first_name: str | None
     is_subscribed: bool
     subscription_until: datetime | None
-    subscription_price_rub: float
+    subscription_price_usdt: float
     subscription_days: int
 
 

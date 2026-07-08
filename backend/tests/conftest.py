@@ -7,9 +7,8 @@ os.environ.setdefault("BOT_TOKEN", "111111:TEST-BOT-TOKEN")
 os.environ.setdefault("BOT_USERNAME", "test_bot")
 os.environ.setdefault("ADMIN_IDS", "")
 os.environ.setdefault("DATABASE_URL", f"sqlite:///{tempfile.mktemp(suffix='.db')}")
-os.environ.setdefault("YOOKASSA_SHOP_ID", "test-shop")
-os.environ.setdefault("YOOKASSA_SECRET_KEY", "test-secret")
-os.environ.setdefault("SUBSCRIPTION_PRICE_RUB", "990")
+os.environ.setdefault("CRYPTO_PAY_API_TOKEN", "test-crypto-pay-token")
+os.environ.setdefault("SUBSCRIPTION_PRICE_USDT", "10")
 os.environ.setdefault("SUBSCRIPTION_DAYS", "30")
 
 import pytest

@@ -9,7 +9,7 @@ from app.routers import auth, listings, payments
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="RUB P2P Exchange")
+app = FastAPI(title="RUBex")
 
 app.add_middleware(
     CORSMiddleware,

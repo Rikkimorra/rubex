@@ -204,7 +204,7 @@ function openPaywall() {
   document.getElementById("paywall-error").textContent = "";
   if (state.me) {
     document.getElementById("paywall-price").textContent =
-      `${fmtRub(state.me.subscription_price_rub)} / ${state.me.subscription_days} дней`;
+      `${state.me.subscription_price_usdt} USDT / ${state.me.subscription_days} дней`;
   }
   openSheet("sheet-paywall");
 }

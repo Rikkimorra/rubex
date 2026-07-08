@@ -8,30 +8,38 @@ from app.db import get_db
 from app.deps import get_current_user
 from app.models import Payment, PaymentStatus, User, utcnow
 from app.schemas import SubscribeResponse
-from app.services.yookassa_service import create_subscription_payment, fetch_payment
+from app.services.crypto_pay_service import create_subscription_invoice, fetch_invoice, verify_webhook_signature
 
 router = APIRouter(prefix="/api", tags=["payments"])
+
+# Соответствие статусов CryptoBot нашим внутренним статусам
+_STATUS_MAP = {
+    "active": PaymentStatus.PENDING,
+    "paid": PaymentStatus.SUCCEEDED,
+    "expired": PaymentStatus.CANCELED,
+}
 
 
 @router.post("/subscribe", response_model=SubscribeResponse)
 def subscribe(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    result = create_subscription_payment(
+    result = create_subscription_invoice(
         user_id=user.id,
-        amount_rub=settings.SUBSCRIPTION_PRICE_RUB,
-        bot_username=settings.BOT_USERNAME,
+        amount=settings.SUBSCRIPTION_PRICE_USDT,
+        description=f"Подписка RUBex на {settings.SUBSCRIPTION_DAYS} дней",
     )
 
     payment = Payment(
         user_id=user.id,
-        yookassa_payment_id=result["id"],
-        amount_rub=settings.SUBSCRIPTION_PRICE_RUB,
+        invoice_id=result["id"],
+        amount=settings.SUBSCRIPTION_PRICE_USDT,
+        asset=settings.CRYPTO_PAY_ASSET,
         status=PaymentStatus.PENDING,
         subscription_days=settings.SUBSCRIPTION_DAYS,
     )
     db.add(payment)
     db.commit()
 
-    return SubscribeResponse(payment_id=result["id"], confirmation_url=result["confirmation_url"])
+    return SubscribeResponse(payment_id=result["id"], confirmation_url=result["pay_url"])
 
 
 def _activate_subscription(db: Session, payment: Payment):
@@ -43,51 +51,51 @@ def _activate_subscription(db: Session, payment: Payment):
     db.commit()
 
 
-@router.post("/yookassa/webhook", status_code=status.HTTP_200_OK)
-async def yookassa_webhook(request: Request, db: Session = Depends(get_db)):
+@router.post("/cryptobot/webhook", status_code=status.HTTP_200_OK)
+async def cryptobot_webhook(request: Request, db: Session = Depends(get_db)):
     """
-    Обработчик уведомлений ЮKassa. Из соображений безопасности мы НЕ доверяем
-    статусу из тела запроса напрямую (его можно подделать, отправив POST на
-    этот URL), а перезапрашиваем актуальный статус платежа через API ЮKassa
-    по его id.
+    Обработчик вебхука CryptoBot. Проверяем подпись заголовка crypto-pay-api-signature
+    по RAW-телу запроса — это защищает от поддельных POST-запросов на этот адрес
+    (в отличие от доверия телу запроса "на слово").
     """
+    raw_body = await request.body()
+    signature = request.headers.get("crypto-pay-api-signature", "")
+
+    if not verify_webhook_signature(raw_body, signature):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid signature")
+
     body = await request.json()
-    payment_id = (body.get("object") or {}).get("id")
-    if not payment_id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "no payment id in payload")
-
-    payment = db.query(Payment).filter(Payment.yookassa_payment_id == payment_id).first()
-    if payment is None:
-        # Неизвестный платёж — игнорируем, но отвечаем 200, чтобы ЮKassa не повторяла запрос бесконечно
+    if body.get("update_type") != "invoice_paid":
         return {"ok": True}
 
-    if payment.status == PaymentStatus.SUCCEEDED:
+    invoice = body.get("payload") or {}
+    invoice_id = str(invoice.get("invoice_id", ""))
+    if not invoice_id:
         return {"ok": True}
 
-    remote = fetch_payment(payment_id)
-    if remote.status == "succeeded":
-        _activate_subscription(db, payment)
-    elif remote.status == "canceled":
-        payment.status = PaymentStatus.CANCELED
-        db.commit()
+    payment = db.query(Payment).filter(Payment.invoice_id == invoice_id).first()
+    if payment is None or payment.status == PaymentStatus.SUCCEEDED:
+        return {"ok": True}
 
+    _activate_subscription(db, payment)
     return {"ok": True}
 
 
 @router.get("/subscribe/{payment_id}/status")
 def subscribe_status(payment_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    """Фронтенд может поллить этот эндпоинт после возврата из оплаты, чтобы обновить статус без ожидания вебхука."""
+    """Фронтенд поллит этот эндпоинт после возврата из оплаты, чтобы не ждать вебхук."""
     payment = db.query(Payment).filter(
-        Payment.yookassa_payment_id == payment_id, Payment.user_id == user.id
+        Payment.invoice_id == payment_id, Payment.user_id == user.id
     ).first()
     if payment is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "payment not found")
 
     if payment.status == PaymentStatus.PENDING:
-        remote = fetch_payment(payment_id)
-        if remote.status == "succeeded":
+        remote = fetch_invoice(payment_id)
+        mapped = _STATUS_MAP.get(remote["status"])
+        if mapped == PaymentStatus.SUCCEEDED:
             _activate_subscription(db, payment)
-        elif remote.status == "canceled":
+        elif mapped == PaymentStatus.CANCELED:
             payment.status = PaymentStatus.CANCELED
             db.commit()
 

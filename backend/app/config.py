@@ -26,12 +26,15 @@ class Settings(BaseSettings):
     # (нужен боту, чтобы прислать кнопку). Например: https://mydomain.ru
     WEBAPP_URL: str = "https://example.com"
 
-    # Учётные данные ЮKassa (https://yookassa.ru/my/merchant/integration/api-keys)
-    YOOKASSA_SHOP_ID: str = ""
-    YOOKASSA_SECRET_KEY: str = ""
+    # Токен приложения Crypto Pay API от @CryptoBot (t.me/CryptoBot -> Crypto Pay -> Create App)
+    CRYPTO_PAY_API_TOKEN: str = ""
+    # https://pay.crypt.bot для мейннета, https://testnet-pay.crypt.bot для тестовой сети (@CryptoTestnetBot)
+    CRYPTO_PAY_BASE_URL: str = "https://pay.crypt.bot"
+    # Актив, в котором принимаем оплату: USDT, TON, BTC, ETH, LTC, BNB, TRX, USDC
+    CRYPTO_PAY_ASSET: str = "USDT"
 
     # Параметры подписки
-    SUBSCRIPTION_PRICE_RUB: float = 990.0
+    SUBSCRIPTION_PRICE_USDT: float = 10.0
     SUBSCRIPTION_DAYS: int = 30
 
     # Секрет для подписи собственных JWT/сессий (сгенерировать случайную строку)

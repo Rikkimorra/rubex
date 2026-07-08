@@ -16,6 +16,6 @@ def me(user: User = Depends(get_current_user)):
         first_name=user.first_name,
         is_subscribed=user.is_subscribed,
         subscription_until=user.subscription_until,
-        subscription_price_rub=settings.SUBSCRIPTION_PRICE_RUB,
+        subscription_price_usdt=settings.SUBSCRIPTION_PRICE_USDT,
         subscription_days=settings.SUBSCRIPTION_DAYS,
     )
