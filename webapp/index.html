@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Обмен рублями</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="app">
+
+  <header class="topbar">
+    <div class="title">Обмен рублями</div>
+    <div id="sub-badge" class="sub-badge">…</div>
+  </header>
+
+  <nav class="tabs" id="amount-tabs">
+    <button class="tab active" data-tab="0-50k">до 50к</button>
+    <button class="tab" data-tab="50-100k">50–100к</button>
+    <button class="tab" data-tab="100-200k">100–200к</button>
+    <button class="tab" data-tab="200k+">200к+</button>
+  </nav>
+
+  <div class="direction-toggle" id="direction-toggle">
+    <button class="dir active" data-dir="">Все</button>
+    <button class="dir" data-dir="buy">Купить рубли</button>
+    <button class="dir" data-dir="sell">Продать рубли</button>
+  </div>
+
+  <main id="listings">
+    <div class="empty-state" id="empty-state">Загрузка…</div>
+  </main>
+
+  <button id="fab-add" class="fab">+ Объявление</button>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="sheet" id="sheet-add">
+    <h3>Новое объявление</h3>
+    <div class="field-row">
+      <button type="button" class="pill active" data-form-dir="buy">Хочу купить рубли</button>
+      <button type="button" class="pill" data-form-dir="sell">Хочу продать рубли</button>
+    </div>
+    <label>Сумма, ₽</label>
+    <input id="form-amount" type="number" inputmode="numeric" placeholder="Например 75000" />
+    <label>Курс / условия / контакт (необязательно)</label>
+    <textarea id="form-details" rows="3" placeholder="Курс, способ оплаты, комментарий..."></textarea>
+    <div class="sheet-actions">
+      <button id="form-cancel" class="btn secondary">Отмена</button>
+      <button id="form-submit" class="btn primary">Опубликовать</button>
+    </div>
+    <div class="error" id="form-error"></div>
+  </div>
+
+  <div class="sheet" id="sheet-paywall">
+    <h3>Нужна подписка</h3>
+    <p>Размещение объявлений и просмотр контактов доступны по подписке.</p>
+    <p class="price" id="paywall-price"></p>
+    <div class="sheet-actions">
+      <button id="paywall-cancel" class="btn secondary">Позже</button>
+      <button id="paywall-pay" class="btn primary">Оплатить</button>
+    </div>
+    <div class="error" id="paywall-error"></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
